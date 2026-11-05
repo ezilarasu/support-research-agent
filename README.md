@@ -65,6 +65,54 @@ ruff check .
 > `Settings` requires `GROQ_API_KEY` at construction time, and some integration tests build
 > the real graph, so the suite needs it set (any non-empty value works offline).
 
+## Try it
+
+Start the CLI (`python main.py`) and paste tickets at the `You:` prompt. Routing uses a zero-shot
+classifier, so a borderline ticket may land on a different label than listed here.
+
+**Technical** — supervisor → technical agent, answered from `data/kb/technical_troubleshooting.md`
+- `I keep getting 401 Unauthorized when calling your API, what should I check?`
+- `My requests are failing with 429 Too Many Requests. How should I handle rate limits?`
+- `Webhook deliveries to my server keep failing. How do I debug this?`
+- `The Python SDK install fails with a dependency error.`
+
+**General** — supervisor → general agent, answered from `data/kb/general_faq.md`
+- `How do I reset my password?`
+- `What's included in each plan and how do I upgrade?`
+- `Where is my data stored and is it encrypted?`
+- `What is your uptime SLA?`
+
+**Billing, no approval needed**
+- `I was charged twice for my invoice this month, can you help?`
+- `I'd like a refund of $50 for an accidental charge.`
+
+**Billing with human approval (HITL)** — refunds of **$500 or more** pause at `approval_check`
+and the CLI prompts `Decision:`. Try approving once and rejecting once to see both branches.
+- `Please refund $750 for my annual subscription, I was charged by mistake.`
+- `I need a refund of $500 for a duplicate payment.`
+
+**Research** — KB worker and web worker run in parallel (Send API fan-out). Without
+`TAVILY_API_KEY` the web worker returns nothing, so you get the KB side only.
+- `Research the best practices for designing API rate limiting and compare them with our rate limit policy.`
+- `What are current industry standards for webhook retry and backoff strategies?`
+
+**Follow-ups** — turns in one CLI run share a thread, so context carries over:
+`How do I upgrade my plan?` then `And will I be charged immediately?`
+(Long-term memory is in-process and resets on restart; see [Known limitations](#known-limitations).)
+
+**Edge cases**
+- `hello` or `it's broken` — low-confidence classification falls back to `general`.
+- `refund me 600 dollars` — exercises refund-amount parsing without a `$` sign.
+
+**Via the API** (no token needed when `JWT_SECRET` is unset; each request gets a new thread ID):
+
+```bash
+uvicorn api.routes:create_app --factory
+curl -N -X POST localhost:8000/tickets -H 'Content-Type: application/json' \
+  -d '{"ticket": "How do I reset my password?"}'
+# add "stream": false to get JSON back: {"thread_id": ..., "response": ...}
+```
+
 ## Configuration
 
 All config goes through `core/settings.py` (pydantic-settings; secrets are `SecretStr`).
@@ -126,7 +174,9 @@ metadata filtering, secure retrieval, RAG tracing, tuning).
 ## Known limitations
 
 - **Long-term memory is in-process.** `memory/store.py` wraps LangGraph's `InMemoryStore`, so
-  memories are lost on restart. Conversation state *is* persisted by the SQLite checkpointer.
+  memories are lost on restart. Conversation state *is* persisted by the SQLite checkpointer, but the CLI starts a new
+  thread on every launch and the API assigns a new thread ID per request, so there is no
+  user-facing way to resume an earlier thread yet.
 - **Postgres checkpointer is documented but not implemented.** `checkpointer_backend` accepts only
   `memory` and `sqlite`; `main.py` also opens `AsyncSqliteSaver` directly rather than using
   `core.factories.get_checkpointer()`.
