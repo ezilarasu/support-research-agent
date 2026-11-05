@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "support-research-agent"
+version = "0.1.0"
+description = "Production-grade multi-agent customer support and research assistant"
+requires-python = ">=3.10"
+
+[project.scripts]
+support-agent = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "graph", "state", "llm_provider"]
+
+[tool.setuptools.packages.find]
+include = ["agents*", "api*", "core*", "memory*", "observability*", "rag*", "security*", "tools*", "workflows*"]
+
+# ── pytest ─────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"          # all async tests run without @pytest.mark.asyncio
+testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests that make real LLM calls (slow, run manually)",
+    "integration: tests that compile and invoke a LangGraph graph",
+    "unit: pure function tests with no external calls",
+]
+# Show 10 slowest tests — helps identify tests that accidentally make real API calls
+addopts = "-v --durations=10"
+
+# ── ruff (linting + formatting) ────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501",  # line too long — ruff format handles this
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agents", "core", "memory", "rag", "security", "state", "llm_provider"]
+
+# ── mypy (type checking) ───────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/"]
